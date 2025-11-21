@@ -25,7 +25,7 @@ class TaxApiService
             $data['crData']['cashierName'],
             $data['crData']['locationName'],
             $data['crData']['locationAddress'],
-            $data['ticketTotalSum'],
+            number_format($data['ticketTotalSum'] / 100, 2, '.', ''),
             $products
         );
 
@@ -40,9 +40,9 @@ class TaxApiService
             $answers[] = new ProductDto(
                 $a,
                 $product['goodName'],
-                $product['goodPrice'],
+                number_format($product['goodPrice'] / 100, 2, '.', ''),
                 $product['goodQuantity'],
-                $product['goodCost'],
+                number_format($product['goodCost'] / 100, 2, '.', '')
             );
             $a++;
         }
