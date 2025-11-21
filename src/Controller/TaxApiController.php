@@ -39,9 +39,9 @@ class TaxApiController extends AbstractController
             $taxData = json_decode($content, true);
 
             // Возвращаем данные с налогового сервиса
-            return $this->json([
-                'data' => $this->taxApiService->TaxApi($taxData),
-            ]);
+            return $this->json(
+                $this->taxApiService->TaxApi($taxData)
+            );
 
         } catch (\Exception $e) {
             return $this->json([
@@ -85,8 +85,6 @@ class TaxApiController extends AbstractController
 //            ], 500);
 //        }
 //    }
-
-
 
 
 }
