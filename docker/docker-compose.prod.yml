@@ -21,7 +21,7 @@ services:
       - php
     volumes:
       - ../:/app:cached
-      - certs:/etc/letsencrypt
+      - ./letsencrypt:/etc/letsencrypt
       - "./nginx/conf.d.prod:/etc/nginx/conf.d"
 #      - ./certbot/conf:/etc/letsencrypt
 #      - ./certbot/www:/var/www/certbot
