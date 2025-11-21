@@ -5,7 +5,7 @@ namespace App\Dto;
 class LinkAnswerDto
 {
     public function __construct(
-        public int    $id,
+        public string $id,
         public string $date,
         public string $time,
         public string $cashierName,
