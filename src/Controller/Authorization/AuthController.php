@@ -25,15 +25,12 @@ class AuthController extends AbstractController
     {
     }
 
-    #[Route('/api/telegram/check', name: 'telegram_check')]
-    public function check(
-        Request $request,
-
-    ): JsonResponse {
-        $data = $request->query->all();
+    #[Route('/api/telegram/webapp', name: 'telegram_webapp', methods: ['POST'])]
+    public function webApp(Request $request): JsonResponse
+    {
+        $data = json_decode(base64_decode($request->request->get('tgAuthResult')), true);
         if (!$this->validateTelegramAuth($data)) {
-            return $this->json(['token' => false]);
-//            return $this->redirect('https://yourfrontend.com/auth/callback?error=invalid');
+            return new JsonResponse(['error' => 'invalid'], 403);
         }
 
         $user = $this->userRepository->findOneBy(['telegramId' => $data['id']]);
