@@ -25,7 +25,7 @@ class AuthController extends AbstractController
     {
     }
 
-    #[Route('/api/telegram/check', name: 'telegram_check')]
+    #[Route('/api/telegram/check', name: 'telegram_check' , methods: ['POST'])]
     public function check(
         Request $request,
 
