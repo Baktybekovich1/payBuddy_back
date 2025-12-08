@@ -9,3 +9,8 @@
 /var/
 /vendor/
 ###< symfony/framework-bundle ###
+.env
+docker/.env
+###> lexik/jwt-authentication-bundle ###
+/config/jwt/*.pem
+###< lexik/jwt-authentication-bundle ###
