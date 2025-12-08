@@ -52,13 +52,19 @@ class AuthController extends AbstractController
         $hash = $data['hash'] ?? '';
         unset($data['hash']);
 
+        // удаляем поля, которые Telegram НЕ подписывает
+        unset($data['v']);          // версия WebApp (если есть)
+        unset($data['bot_id']);     // тоже не участвует
+
         $checkArr = [];
         foreach ($data as $k => $v) {
             $checkArr[] = $k . '=' . $v;
         }
-        sort($checkArr);
-        $secret = hash('sha256', $_ENV['TELEGRAM_BOT_TOKEN'], true);
-        $calcHash = hash_hmac('sha256', implode("\n", $checkArr), $secret);
+        sort($checkArr, SORT_STRING);  // важно: строковая сортировка
+        $dataCheckString = implode("\n", $checkArr);
+
+        $secretKey = hash('sha256', $_ENV['TELEGRAM_BOT_TOKEN'], true);
+        $calcHash  = hash_hmac('sha256', $dataCheckString, $secretKey);
 
         return hash_equals($calcHash, $hash);
     }
