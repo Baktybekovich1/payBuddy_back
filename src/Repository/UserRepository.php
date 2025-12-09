@@ -40,4 +40,25 @@ class UserRepository extends ServiceEntityRepository
     //            ->getOneOrNullResult()
     //        ;
     //    }
+    public function save(User $user): bool
+    {
+        try {
+            $this->getEntityManager()->persist($user);
+            $this->getEntityManager()->flush();
+            return true;
+        }catch (\Throwable $exception){
+            return false;
+        }
+    }
+
+    public function remove(User $user): bool
+    {
+        try {
+            $this->getEntityManager()->remove($user);
+            $this->getEntityManager()->flush();
+            return true;
+        }catch (\Throwable $exception){
+            return false;
+        }
+    }
 }

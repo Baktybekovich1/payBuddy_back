@@ -3,8 +3,10 @@
 namespace App\Controller\Authorization;
 
 
+use App\Dto\LinkDto;
 use App\Entity\User;
 use App\Repository\UserRepository;
+use App\Services\SetUserQrService;
 use Doctrine\ORM\EntityManagerInterface;
 use Lexik\Bundle\JWTAuthenticationBundle\Services\JWTTokenManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -12,24 +14,28 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpKernel\Attribute\MapRequestPayload;
 use Symfony\Component\Routing\Annotation\Route;
+use Symfony\Component\Security\Core\User\UserInterface;
 
 class AuthController extends AbstractController
 {
     public function __construct(
 
-        private readonly UserRepository $userRepository,
-        private readonly EntityManagerInterface $em,
-        private readonly JWTTokenManagerInterface $jwtManager
+        private readonly UserRepository           $userRepository,
+        private readonly EntityManagerInterface   $em,
+        private readonly JWTTokenManagerInterface $jwtManager,
+        private readonly SetUserQrService         $setUserQrService
     )
     {
     }
 
-    #[Route('/api/telegram/check', name: 'telegram_check' , methods: ['POST'])]
+    #[Route('/api/telegram/check', name: 'telegram_check', methods: ['POST'])]
     public function check(
         Request $request,
 
-    ): JsonResponse {
+    ): JsonResponse
+    {
         $data = $request->query->all();
         if (!$this->validateTelegramAuth($data)) {
             return $this->json(['token' => false]);
@@ -47,7 +53,7 @@ class AuthController extends AbstractController
 
         $token = $this->jwtManager->create($user);
 
-        return $this->json(['token'=> $token]);
+        return $this->json(['token' => $token]);
     }
 
     private function validateTelegramAuth(array $data): bool
@@ -85,7 +91,7 @@ class AuthController extends AbstractController
 
         $token = $this->jwtManager->create($user);
 
-        return $this->json(['token'=> $token]);
+        return $this->json(['token' => $token]);
     }
 
     private function validateTelegramAut(array $data): bool
@@ -105,9 +111,15 @@ class AuthController extends AbstractController
         $dataCheckString = implode("\n", $checkArr);
 
         $secretKey = hash('sha256', $_ENV['TELEGRAM_BOT_TOKEN'], true);
-        $calcHash  = hash_hmac('sha256', $dataCheckString, $secretKey);
+        $calcHash = hash_hmac('sha256', $dataCheckString, $secretKey);
 
         return hash_equals($calcHash, $hash);
+    }
+
+    #[Route('/api/add/qr', name: 'add_qr', methods: ['POST'])]
+    public function telegramCheck(#[MapRequestPayload] LinkDto $linkDto, UserInterface $userInterface): JsonResponse
+    {
+        return $this->json(['status' => $this->setUserQrService->setQr($linkDto, $userInterface->getUserIdentifier())]);
     }
 
 

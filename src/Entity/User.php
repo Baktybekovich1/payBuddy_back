@@ -3,6 +3,7 @@
 namespace App\Entity;
 
 use App\Repository\UserRepository;
+use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 use Symfony\Component\Security\Core\User\UserInterface;
 
@@ -23,6 +24,9 @@ class User implements UserInterface
     private ?int $telegramId = null;
     #[ORM\Column]
     private array $roles = [];
+
+    #[ORM\Column(type: Types::TEXT, nullable: true)]
+    private ?string $paymentLink = null;
 
     public function getId(): ?int
     {
@@ -84,5 +88,17 @@ class User implements UserInterface
     public function eraseCredentials(): void
     {
         // @deprecated, to be removed when upgrading to Symfony 8
+    }
+
+    public function getPaymentLink(): ?string
+    {
+        return $this->paymentLink;
+    }
+
+    public function setPaymentLink(?string $paymentLink): static
+    {
+        $this->paymentLink = $paymentLink;
+
+        return $this;
     }
 }
