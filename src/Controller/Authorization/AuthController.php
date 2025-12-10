@@ -30,7 +30,7 @@ class AuthController extends AbstractController
     {
     }
 
-    #[Route('/api/telegram/check', name: 'telegram_check', methods: ['POST'])]
+    #[Route('/api/telegram/check', name: 'telegram_check')]
     public function check(
         Request $request,
 
@@ -72,7 +72,7 @@ class AuthController extends AbstractController
         return hash_equals($calcHash, $hash);
     }
 
-    #[Route('/api/telegram/webapp', name: 'telegram_webapp', methods: ['POST'])]
+    #[Route('/api/telegram/webapp', name: 'telegram_webapp')]
     public function webApp(Request $request): JsonResponse
     {
         $data = json_decode(base64_decode($request->request->get('tgAuthResult')), true);
