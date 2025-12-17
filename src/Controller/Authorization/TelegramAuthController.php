@@ -6,137 +6,158 @@ namespace App\Controller\Authorization;
 use App\Entity\User;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Annotation\Route;
-use Symfony\Component\Security\Http\Authentication\UserAuthenticatorInterface;
-use App\Security\TelegramAuthenticator;
+use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 
+#[Route('/api/auth')]
 class TelegramAuthController extends AbstractController
 {
-    #[Route('/telegram-auth', name: 'telegram_auth')]
-    public function telegramAuth(Request $request): Response
-    {
-        return $this->render('auth/telegram_login.html.twig');
+    private EntityManagerInterface $em;
+//    private UserPasswordHasherInterface $passwordHasher;
+    private string $botToken;
+
+    public function __construct(
+        EntityManagerInterface $em,
+        UserPasswordHasherInterface $passwordHasher
+    ) {
+        $this->em = $em;
+//        $this->passwordHasher = $passwordHasher;
+        $this->botToken = $_ENV['TELEGRAM_BOT_TOKEN'] ?? '';
     }
 
-    #[Route('/telegram-callback', name: 'telegram_callback')]
-    public function telegramCallback(
-        Request $request,
-        EntityManagerInterface $em,
-        UserAuthenticatorInterface $userAuthenticator,
-        TelegramAuthenticator $telegramAuthenticator
-    ): Response {
-        // Проверяем подпись Telegram
-        $authData = $request->query->all();
+    #[Route('/telegram/callback', name: 'api_telegram_callback', methods: ['POST'])]
+    public function telegramCallback(Request $request): JsonResponse
+    {
+        $data = json_decode($request->getContent(), true);
 
-        // Валидация данных
-        if (!isset($authData['id'], $authData['hash'])) {
-            $this->addFlash('error', 'Invalid Telegram data');
-            return $this->redirectToRoute('app_login');
+        if (!$data) {
+            return new JsonResponse([
+                'success' => false,
+                'error' => 'No data provided'
+            ], Response::HTTP_BAD_REQUEST);
         }
 
-        $telegramId = (int) $authData['id'];
-        $username = $authData['username'] ?? null;
-        $firstName = $authData['first_name'] ?? null;
-        $lastName = $authData['last_name'] ?? null;
+        // Проверяем подпись Telegram
+        if (!$this->validateTelegramData($data)) {
+            return new JsonResponse([
+                'success' => false,
+                'error' => 'Invalid Telegram signature'
+            ], Response::HTTP_UNAUTHORIZED);
+        }
+
+        $telegramId = (int) $data['id'];
+        $telegramUsername = $data['username'] ?? null;
+        $firstName = $data['first_name'] ?? '';
 
         // Ищем пользователя по telegramId
-        $user = $em->getRepository(User::class)->findOneBy(['telegramId' => $telegramId]);
+        $user = $this->em->getRepository(User::class)
+            ->findOneBy(['telegramId' => $telegramId]);
 
         if (!$user) {
-            // Проверяем, есть ли авторизованный пользователь (для привязки Telegram)
-            $currentUser = $this->getUser();
-
-            if ($currentUser) {
-                // Привязываем Telegram к существующему пользователю
-                $currentUser->setTelegramId($telegramId);
-                $em->flush();
-
-                $this->addFlash('success', 'Telegram успешно привязан!');
-                return $this->redirectToRoute('app_profile');
-            } else {
-                // Создаем нового пользователя
-                $user = $this->createUserFromTelegramData($telegramId, $username, $firstName, $lastName, $em);
-
-                if (!$user) {
-                    $this->addFlash('error', 'Не удалось создать пользователя');
-                    return $this->redirectToRoute('app_register');
-                }
-            }
+            // Создаем нового пользователя
+            $user = $this->createUser($telegramId, $telegramUsername, $firstName);
+        } else {
+            // Обновляем существующего пользователя
+            $user->setUsername($telegramUsername ?? $user->getUsername());
         }
 
-        // Авторизуем пользователя
-        return $userAuthenticator->authenticateUser(
-            $user,
-            $telegramAuthenticator,
-            $request
-        );
+        $this->em->flush();
+
+        // Генерируем JWT токен или другой токен
+        $token = $this->generateToken($user);
+
+        return new JsonResponse([
+            'success' => true,
+            'token' => $token,
+            'user' => [
+                'id' => $user->getId(),
+                'username' => $user->getUsername(),
+                'telegramId' => $user->getTelegramId(),
+                'roles' => $user->getRoles()
+            ]
+        ]);
     }
 
-    #[Route('/link-telegram', name: 'link_telegram')]
-    public function linkTelegram(): Response
+    #[Route('/telegram/validate', name: 'api_telegram_validate', methods: ['POST'])]
+    public function validateTelegram(Request $request): JsonResponse
     {
-        $this->denyAccessUnlessGranted('IS_AUTHENTICATED_FULLY');
+        $data = json_decode($request->getContent(), true);
 
-        return $this->render('auth/link_telegram.html.twig');
-    }
-
-    #[Route('/unlink-telegram', name: 'unlink_telegram')]
-    public function unlinkTelegram(EntityManagerInterface $em): Response
-    {
-        $this->denyAccessUnlessGranted('IS_AUTHENTICATED_FULLY');
-
-        $user = $this->getUser();
-        $user->setTelegramId(null);
-        $em->flush();
-
-        $this->addFlash('success', 'Telegram успешно отвязан');
-        return $this->redirectToRoute('app_profile');
-    }
-
-    private function createUserFromTelegramData(
-        int $telegramId,
-        ?string $username,
-        ?string $firstName,
-        ?string $lastName,
-        EntityManagerInterface $em
-    ): ?User {
-        // Генерируем уникальное имя пользователя
-        $baseUsername = $username ?: 'tg_user_' . $telegramId;
-        $finalUsername = $baseUsername;
-        $counter = 1;
-
-        // Проверяем уникальность имени пользователя
-        while ($em->getRepository(User::class)->findOneBy(['username' => $finalUsername])) {
-            $finalUsername = $baseUsername . '_' . $counter;
-            $counter++;
+        if (!$data || !isset($data['hash'])) {
+            return new JsonResponse([
+                'valid' => false,
+                'error' => 'Invalid data'
+            ]);
         }
 
+        $isValid = $this->validateTelegramData($data);
+
+        return new JsonResponse([
+            'valid' => $isValid,
+            'telegramId' => $isValid ? ($data['id'] ?? null) : null
+        ]);
+    }
+
+    private function validateTelegramData(array $data): bool
+    {
+        if (!isset($data['hash'])) {
+            return false;
+        }
+
+        $checkHash = $data['hash'];
+        unset($data['hash']);
+
+        ksort($data);
+
+        $dataCheckArr = [];
+        foreach ($data as $key => $value) {
+            $dataCheckArr[] = $key . '=' . $value;
+        }
+
+        $dataCheckString = implode("\n", $dataCheckArr);
+        $secretKey = hash('sha256', $this->botToken, true);
+        $hash = hash_hmac('sha256', $dataCheckString, $secretKey);
+
+        return hash_equals($hash, $checkHash);
+    }
+
+    private function createUser(int $telegramId, ?string $telegramUsername, string $firstName): User
+    {
         $user = new User();
         $user->setTelegramId($telegramId);
-        $user->setUsername($finalUsername);
-//        $user->setFirstName($firstName);
-//        $user->setLastName($lastName);
 
-        // Устанавливаем email на основе Telegram (можно изменить)
-//        $user->setEmail("telegram_{$telegramId}@example.com");
+        // Генерируем username
+        $username = $telegramUsername ?: 'user_' . $telegramId;
+        $user->setUsername($username);
 
-        // Устанавливаем случайный пароль (пользователь сможет изменить его позже)
-//        $user->setPassword(password_hash(bin2hex(random_bytes(16)), PASSWORD_DEFAULT));
+        // Устанавливаем роль
+        $user->setRoles(['ROLE_USER']);
 
-        // Активируем пользователя
-//        $user->setIsActive(true);
+        // Генерируем случайный пароль (не используется при Telegram auth)
+//        $user->setPassword($this->passwordHasher->hashPassword($user, bin2hex(random_bytes(16))));
 
-        try {
-            $em->persist($user);
-            $em->flush();
+        $this->em->persist($user);
 
-            return $user;
-        } catch (\Exception $e) {
-            // Логируем ошибку
-            error_log('Error creating user from Telegram: ' . $e->getMessage());
-            return null;
-        }
+        return $user;
+    }
+
+    private function generateToken(User $user): string
+    {
+        // Генерируем JWT токен
+        // Или используйте lexik/jwt-authentication-bundle
+
+        // Временное решение - возвращаем base64 encoded user info
+        $tokenData = [
+            'id' => $user->getId(),
+            'telegramId' => $user->getTelegramId(),
+            'username' => $user->getUsername(),
+            'roles' => $user->getRoles(),
+            'exp' => time() + (24 * 60 * 60) // 24 часа
+        ];
+
+        return base64_encode(json_encode($tokenData));
     }
 }
